@@ -152,7 +152,7 @@ export function ProbeResultCard({ result }: { result: ProbeResult }) {
                 <span className="num">{fmtNum(r.auc)}</span>
               </td>
               <td>{r.verdict}</td>
-              <td className="r num">{fmtNum(r.spread_ratio, 1)}×</td>
+              <td className="r num">{r.spread_ratio !== null && r.spread_ratio > 99 ? ">99" : fmtNum(r.spread_ratio, 1)}×</td>
               <td className="r num">{fmtNum(r.weight)}</td>
             </tr>
           ))}

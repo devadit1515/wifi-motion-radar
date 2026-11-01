@@ -28,8 +28,10 @@ import numpy as np
 # Prior weight per stream kind before any probe has measured what works in this home.
 # Tx frame rate is mostly our own probes, so it carries no motion information. Failed
 # frames are sparse events: one failure in a quiet window is a huge z, so it gets little.
+# The retry counter follows no documented meaning on the MT7925 and ramps smoothly, so
+# a tiny wiggle reads as z > 10; it stays low until a probe shows it carries motion.
 KIND_PRIOR = {
-    "rtt": 1.0, "retry": 0.7, "fail": 0.1, "rssi": 0.4, "rate": 0.2,
+    "rtt": 1.0, "retry": 0.2, "fail": 0.1, "rssi": 0.4, "rate": 0.2,
     "quality": 0.0, "tx": 0.0, "truth": 0.0,
 }  # fmt: skip
 
