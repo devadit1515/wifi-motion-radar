@@ -240,6 +240,7 @@ class RangeProcessor:
         self._recent_r: list[float] = []  # raw detected ranges, for jump detection
         self._prev_resid: np.ndarray | None = None
         self._decorr: float | None = None
+        self._last_moving_t = -math.inf
         self._moving_hist: list[tuple[float, bool]] = []
         self.presence: PresenceMap | None = None
         self._t = 0.0
@@ -428,14 +429,15 @@ class RangeProcessor:
             pb = int(np.argmax(pr))
             presence = math.log10(float(pr[pb]) + 1e-12)
             lt = self._last_target
-            near = lt is not None and abs(float(self.centres[pb]) - lt.r) < 0.6
-            if lt is not None and lt.still and near and pr[pb] > cfg.presence_ratio:
-                # Someone the fast tracker sees but who is not moving: the presence
-                # channel, built for exactly this, places them more reliably.
-                self._still_r = _ewma(self._still_r, float(self.centres[pb]), 0.2)
-                self._last_target = Target(self._still_r, lt.path_diff, lt.strength,
-                                           moving=False, still=True)  # fmt: skip
-            elif self._last_target is None and pr[pb] > cfg.presence_ratio:
+            if lt is not None and lt.moving:
+                self._last_moving_t = self._t
+            if lt is not None and not lt.moving and self._t - self._last_moving_t > 3.0:
+                # Nothing has moved for a while, so the fast tracker is following
+                # leftovers (reverberation, an old echo). A still person is the
+                # presence channel's job: use it, or show nothing. A walker who only
+                # slowed down for a moment keeps their track.
+                self._last_target = None
+            if self._last_target is None and pr[pb] > cfg.presence_ratio:
                 k = int(self.edges[pb] + self.bin_samples / 2)
                 pd = self._path_diff(self.presence.deviation(), k) if self.channels > 1 else None
                 self._still_r = _ewma(self._still_r, float(self.centres[pb]), 0.2)
