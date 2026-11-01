@@ -60,7 +60,14 @@ class SonarConfig:
     gate_m: float = 0.35  # tracker gate half-width when the track was just confirmed
     gate_growth: float = 1.0  # gate widening per second unconfirmed (walking pace)
     gate_floor: float = 0.35  # weight of peaks far outside the gate
-    motion_percentile: float = 75.0
+    # Moving versus still. At half a metre even breathing changes the echo a lot, so
+    # "the echo changed" cannot mean "moving". What separates them is how fast the
+    # echo's phase turns: walking at 0.3 m/s turns it more than a full cycle per 43 ms
+    # frame, so consecutive frames are unrelated (decorrelation near 1); breathing turns
+    # it a few degrees (near 0). Measured at the tracked distance, averaged briefly.
+    move_decorr: float = 0.3  # breathing measured 0.02 to 0.2 in simulation
+    decorr_alpha: float = 0.3
+    jump_m: float = 0.3  # a bigger frame-to-frame jump is re-acquisition, not movement
     # Presence: slow phase changes of the echo over a sliding window. A standing or
     # sitting person sways and breathes by millimetres; at 20 kHz (1.7 cm wavelength)
     # that turns the echo's phase by tens of degrees, which this window catches while
@@ -170,7 +177,7 @@ class PresenceMap:
 @dataclass
 class SonarFrame:
     health: Health
-    motion: float = math.nan  # log10 of residual power over its usual level
+    motion: float = math.nan  # share of the last second someone was changing distance
     presence: float = math.nan  # log10 of the strongest slow-change ratio
     target: Target | None = None
     bins: list[float] = field(default_factory=list)  # 0..1 motion intensity per bin
@@ -229,6 +236,10 @@ class RangeProcessor:
         self._last_target: Target | None = None
         self._still_r: float | None = None
         self._still_pd: float | None = None
+        self._recent_r: list[float] = []  # raw detected ranges, for jump detection
+        self._prev_resid: np.ndarray | None = None
+        self._decorr: float | None = None
+        self._moving_hist: list[tuple[float, bool]] = []
         self.presence: PresenceMap | None = None
         self._t = 0.0
 
@@ -355,9 +366,6 @@ class RangeProcessor:
         detected = self._hits >= cfg.confirm_frames
         quiet = ratio < cfg.detect_ratio
         self.floor[quiet] += cfg.floor_alpha * (bins[quiet] - self.floor[quiet])
-        # Motion level: how far the busier part of the room sits above its usual level.
-        # Because of reverberation this rises wherever in the room the motion is.
-        motion = math.log10(float(np.percentile(ratio, cfg.motion_percentile)) + 1e-12)
 
         if detected:
             lo, hi = edges[max(0, best - 1)], edges[min(self.n_bins, best + 2)]
@@ -366,21 +374,46 @@ class RangeProcessor:
             k_f = k + _parabolic(power, k)
             r = self.range_of_sample(k_f)
             pd = self._path_diff(resid, k) if self.channels > 1 else None
+            # A person cannot cover 30 cm in one 43 ms frame. A jump that big is the
+            # tracker re-acquiring on a different echo: start a fresh track there rather
+            # than sliding the dot across the room or counting the jump as movement.
+            jumped = bool(self._recent_r) and abs(r - float(np.median(self._recent_r))) > cfg.jump_m
+            if jumped:
+                self._recent_r.clear()
+                self._smooth_r = self._smooth_pd = None
+            self._recent_r = (self._recent_r + [r])[-5:]
             self._smooth_r = _ewma(self._smooth_r, r, 0.35)
             if pd is not None:
                 self._smooth_pd = _ewma(self._smooth_pd, pd, 0.25)
             self._last_seen = self._t
-            self._last_target = Target(self._smooth_r, self._smooth_pd, float(ratio[best]), True)
+            # On a jump the previous frame's residual belongs to a different echo, so
+            # comparing them says nothing about how fast this one is turning.
+            d = None if jumped else self._decorrelation(resid[0], lo, hi)
+            if d is not None:
+                self._decorr = _ewma(self._decorr, min(d, 1.0), cfg.decorr_alpha)
+            moving = self._decorr is not None and self._decorr > cfg.move_decorr
+            self._last_target = Target(self._smooth_r, self._smooth_pd, float(ratio[best]),
+                                       moving=moving, still=not moving)  # fmt: skip
         elif (
             self._last_target
-            and not self._last_target.still
             and self._t - self._last_seen <= cfg.hold_s
+            and self._smooth_r is not None
         ):
             lt = self._last_target
-            self._last_target = Target(lt.r, lt.path_diff, lt.strength, False)
+            self._last_target = Target(lt.r, lt.path_diff, lt.strength, False, still=lt.still)
         else:
             self._last_target = None
             self._smooth_r = self._smooth_pd = None
+            self._recent_r.clear()
+            self._decorr = None
+
+        # Motion level for the detector: the share of the last second in which someone
+        # was moving (distance changing). Breathing and fidgeting never raise it.
+        self._prev_resid = resid[0].copy()
+        now_moving = bool(self._last_target and self._last_target.moving)
+        self._moving_hist.append((self._t, now_moving))
+        self._moving_hist = [(t, m) for t, m in self._moving_hist if self._t - t <= 1.0]
+        motion = sum(m for _, m in self._moving_hist) / len(self._moving_hist)
 
         # No walking target: fall back to the slow presence channel, which still sees
         # someone who has stopped, by their sway and breathing.
@@ -390,7 +423,15 @@ class RangeProcessor:
             pr = np.where(valid, pres, 0.0)
             pb = int(np.argmax(pr))
             presence = math.log10(float(pr[pb]) + 1e-12)
-            if self._last_target is None and pr[pb] > cfg.presence_ratio:
+            lt = self._last_target
+            near = lt is not None and abs(float(self.centres[pb]) - lt.r) < 0.6
+            if lt is not None and lt.still and near and pr[pb] > cfg.presence_ratio:
+                # Someone the fast tracker sees but who is not moving: the presence
+                # channel, built for exactly this, places them more reliably.
+                self._still_r = _ewma(self._still_r, float(self.centres[pb]), 0.2)
+                self._last_target = Target(self._still_r, lt.path_diff, lt.strength,
+                                           moving=False, still=True)  # fmt: skip
+            elif self._last_target is None and pr[pb] > cfg.presence_ratio:
                 k = int(self.edges[pb] + self.bin_samples / 2)
                 pd = self._path_diff(self.presence.deviation(), k) if self.channels > 1 else None
                 self._still_r = _ewma(self._still_r, float(self.centres[pb]), 0.2)
@@ -416,6 +457,18 @@ class RangeProcessor:
             echoes=self._echoes(static_db),
             direct_diff_m=self.direct_diff_m,
         )
+
+    def _decorrelation(self, r0: np.ndarray, lo: int, hi: int) -> float | None:
+        """How unrelated this frame's residual is to the last one over samples lo:hi:
+        0 for an echo whose phase barely turned, about 1 for one that turned a full
+        cycle or more (or for pure noise, which is why it is only read at a tracked
+        target, where the echo dominates)."""
+        prev = self._prev_resid
+        if prev is None or hi <= lo:
+            return None
+        a, b = r0[lo:hi], prev[lo:hi]
+        den = float(np.sum(np.abs(a) ** 2 + np.abs(b) ** 2))
+        return float(np.sum(np.abs(a - b) ** 2)) / den if den > 0 else None
 
     def _path_diff(self, resid: np.ndarray, k: int) -> float | None:
         """Mic 1 minus mic 0 arrival difference of the echo at sample k, in metres.

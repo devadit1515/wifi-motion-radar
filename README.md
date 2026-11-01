@@ -115,6 +115,10 @@ against distance at about 10 cm resolution. Three layers turn that into a dot:
 - **Still person.** A standing or sitting person sways and breathes by millimetres. At
   20 kHz (1.7 cm wavelength) that rotates the echo's phase by tens of degrees, so the
   variance of the complex echo over a 3 second window marks where they are.
+- **Moving or just breathing?** Close to the PC, breathing alone changes the echo a lot,
+  so "the echo changed" cannot mean "moving". Walking turns the echo's phase more than
+  a full cycle per 43 ms frame, so consecutive frames look unrelated; breathing turns it
+  a few degrees. Only that frame-to-frame decorrelation counts as motion.
 - **Direction.** The same echo reaches the two microphones at slightly different times.
   That difference, centred by a one-click calibration, turns the distance into a position.
 

@@ -93,6 +93,20 @@ def test_a_person_standing_still_is_found_by_their_sway():
     assert np.median([f.presence for f in out[60:]]) > np.log10(CFG.presence_ratio)
 
 
+def test_breathing_at_the_desk_is_still_not_motion():
+    # Someone sitting 0.6 m away, chest moving 5 mm at 0.25 Hz: a strong, changing
+    # echo, but their distance does not change, so it must never count as moving.
+    def breathe(i):
+        return 0.6 + 0.005 * np.sin(2 * np.pi * 0.25 * i * P / CFG.fs)
+
+    _, out = run(frames(200, target=breathe))
+    late = out[60:]
+    assert not any(f.target and f.target.moving for f in late)
+    assert max(f.motion for f in late) == 0.0
+    seen = [f.target for f in late if f.target]
+    assert len(seen) > 0.8 * len(late) and all(t.still for t in seen)
+
+
 def test_muted_speakers_give_a_warning_and_no_made_up_target():
     def walk(i):
         return 2.0 + 0.15 * np.sin(i / 3)

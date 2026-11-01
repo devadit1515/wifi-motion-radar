@@ -100,7 +100,7 @@ class SonarSource(Source):
     def streams(self) -> list[StreamInfo]:
         hz = self.cfg.fs / self.cfg.period
         return [
-            StreamInfo("sonar.motion", "sonar", "log ratio", hz, "sonar", "Sonar motion",
+            StreamInfo("sonar.motion", "sonar", "share", hz, "sonar", "Sonar motion",
                        stab_tol=0.1, activity="level"),  # fmt: skip
             StreamInfo("sonar.presence", "sonar_presence", "log ratio", hz, "sonar",
                        "Sonar presence", stab_tol=0.1, activity="level"),  # fmt: skip
