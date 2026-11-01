@@ -146,8 +146,10 @@ class SonarSource(Source):
         except Exception as e:  # device busy, unplugged, wrong format
             self.error = str(e)
             if any(s in self.error for s in ("Invalid device", "Unanticipated host error")):
-                self.error = ("The microphone is busy or unavailable. Close any other copy of "
-                              "Motion Radar, or call and recording apps, then restart.")  # fmt: skip
+                self.error = (
+                    "The microphone is busy or unavailable. Close any other copy of "
+                    "Motion Radar, or call and recording apps, then restart."
+                )
             self.notify("sonar", f"Sonar could not start: {e}")
             log.warning("sonar could not start: %s", e)
             return
