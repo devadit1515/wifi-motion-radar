@@ -68,6 +68,7 @@ class SonarConfig:
     move_decorr: float = 0.3  # breathing measured 0.02 to 0.2 in simulation
     decorr_alpha: float = 0.3
     jump_m: float = 0.3  # a bigger frame-to-frame jump is re-acquisition, not movement
+    motion_min_share: float = 0.3  # moving for at least this share of a second
     # Presence: slow phase changes of the echo over a sliding window. A standing or
     # sitting person sways and breathes by millimetres; at 20 kHz (1.7 cm wavelength)
     # that turns the echo's phase by tens of degrees, which this window catches while
@@ -413,7 +414,10 @@ class RangeProcessor:
         now_moving = bool(self._last_target and self._last_target.moving)
         self._moving_hist.append((self._t, now_moving))
         self._moving_hist = [(t, m) for t, m in self._moving_hist if self._t - t <= 1.0]
-        motion = sum(m for _, m in self._moving_hist) / len(self._moving_hist)
+        share = sum(m for _, m in self._moving_hist) / len(self._moving_hist)
+        # A hand on the mouse or a shift in the chair moves for a frame or two; only
+        # movement filling a good part of the second counts as motion.
+        motion = share if share >= cfg.motion_min_share else 0.0
 
         # No walking target: fall back to the slow presence channel, which still sees
         # someone who has stopped, by their sway and breathing.
