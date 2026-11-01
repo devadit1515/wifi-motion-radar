@@ -95,7 +95,7 @@ async def run(args: argparse.Namespace) -> None:
                     res = await page.call(
                         "Runtime.evaluate", expression=args.probe_js, returnByValue=True
                     )
-                    print(view, "→", res.get("result", {}).get("value"))
+                    print(view, "->", res.get("result", {}).get("value"))
                 metrics = await page.call("Page.getLayoutMetrics")
                 h = min(int(metrics["cssContentSize"]["height"]), args.max_height)
                 shot = await page.call(
