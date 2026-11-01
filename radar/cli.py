@@ -18,15 +18,32 @@ def _serve(args: argparse.Namespace) -> None:
     from radar.engine import Engine
     from radar.server.app import SourceReq, create_app
 
+    url = f"http://{'127.0.0.1' if args.host in ('0.0.0.0', '::') else args.host}:{args.port}"
+    if _already_running(url):
+        # A second copy could get neither the port nor the microphone: reuse the first.
+        print(f"Motion Radar is already running at {url}; opening it.")
+        if args.open:
+            webbrowser.open(url)
+        return
+
     engine = Engine(args.data)
     if args.sonar:
         engine.sonar_enabled = True
     app = create_app(engine, SourceReq(kind=args.source))
-    url = f"http://{'127.0.0.1' if args.host in ('0.0.0.0', '::') else args.host}:{args.port}"
     print(f"WiFi Motion Radar → {url}  (source: {args.source})")
     if args.open:
         webbrowser.open(url)
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+
+
+def _already_running(url: str) -> bool:
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(f"{url}/api/health", timeout=1.5) as r:
+            return r.status == 200
+    except OSError:
+        return False
 
 
 def _build(source: str, data: Path):
