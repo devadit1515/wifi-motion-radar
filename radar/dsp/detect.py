@@ -38,8 +38,9 @@ KIND_PRIOR = {
 # When the sonar is running it is a direct measurement of motion in the room, while the
 # WiFi streams on a short, strong link carry almost none. Averaging seven noisy RTT
 # streams into it would bury it, so until a probe measures otherwise, it decides alone.
-# Its slow presence channel joins at half weight so small movements still register.
-SONAR_PRIOR = {"sonar": 1.0, "sonar_presence": 0.5}
+# The sonar's presence channel is deliberately left out: it exists to notice someone
+# sitting still (by sway and breathing), so feeding it in made stillness read as motion.
+SONAR_PRIOR = {"sonar": 1.0}
 
 
 @dataclass

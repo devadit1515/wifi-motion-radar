@@ -43,6 +43,7 @@ class SonarConfig:
     max_range_m: float = 5.0
     bin_m: float = 0.05
     lock_frames: int = 12
+    min_snr_db: float = 12.0  # below this the sweep is not heard well enough to trust
     warm_frames: int = 20  # learn the noise floor before reporting anything
     confirm_frames: int = 2  # consecutive detections before a target is shown
     bg_alpha: float = 0.04  # background update per frame (~1 s time constant)
@@ -249,7 +250,7 @@ class RangeProcessor:
         if peak > 0.99:
             return Health("clipping", input_db, snr_db, "The microphone is overloading. "
                           "Lower the speaker volume a little.")  # fmt: skip
-        if self.lag is None:
+        if self.lag is None or snr_db is None:
             return Health("locking", input_db, snr_db, "Finding the direct speaker-to-mic path.")
         if snr_db is not None and snr_db < 15:
             return Health("weak", input_db, snr_db, "The sweep is barely heard. Raise the speaker "
@@ -286,9 +287,18 @@ class RangeProcessor:
             self._misses += 1
             if self._misses > 10:
                 self.reset()
-            return SonarFrame(self._health(block, None))
+            # Report how well the sweep is heard, so muted speakers read as "weak".
+            snr = 20 * math.log10(float(mag0.max()) / (float(np.median(mag0)) + 1e-12))
+            self._last_target = None
+            return SonarFrame(self._health(block, snr))
         self._misses = 0
         snr_db = 20 * math.log10(direct / (float(np.median(mag0)) + 1e-12))
+        if snr_db < cfg.min_snr_db:
+            # The sweep is barely heard (speakers muted or turned down): anything
+            # "detected" now would be noise, so report the problem and nothing else.
+            self._last_target = None
+            self._smooth_r = self._smooth_pd = self._still_r = self._still_pd = None
+            return SonarFrame(self._health(block, snr_db), direct_diff_m=self.direct_diff_m)
 
         idx = (self.lag + np.arange(self.K)) % P
         aligned = prof[:, idx]

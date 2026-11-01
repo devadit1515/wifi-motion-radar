@@ -93,6 +93,20 @@ def test_a_person_standing_still_is_found_by_their_sway():
     assert np.median([f.presence for f in out[60:]]) > np.log10(CFG.presence_ratio)
 
 
+def test_muted_speakers_give_a_warning_and_no_made_up_target():
+    def walk(i):
+        return 2.0 + 0.15 * np.sin(i / 3)
+
+    proc = RangeProcessor(CFG, 2)
+    out = []
+    for i, b in enumerate(frames(80, target=walk)):
+        # After the lock the speakers are muted: only room noise reaches the mic.
+        out.append(proc.process(b * (1.0 if i < 30 else 0.0) + 1e-3 * np.random.randn(*b.shape)))
+    late = out[40:]
+    assert all(f.target is None for f in late)
+    assert all(f.health.status in ("weak", "locking") for f in late)
+
+
 def test_dead_microphone_is_reported_as_silent():
     proc = RangeProcessor(CFG, 2)
     f = proc.process(np.zeros((P, 2), np.float32))
