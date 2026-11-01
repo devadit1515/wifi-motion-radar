@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+
+# Frontend
+web/node_modules/
+web/dist/
+
+# Local data: recordings, anchors and probe results stay on this machine.
+# Only data/sample/ is committed.
+data/*
+!data/sample/
+!data/README.md
+
+# Models trained on private recordings
+models/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
