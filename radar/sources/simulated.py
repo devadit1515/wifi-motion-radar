@@ -354,7 +354,7 @@ class HomeSim:
 def sim_streams(anchor_ids: list[str], hz: float) -> list[StreamInfo]:
     names = {"gw": "Router"} | {a: f"Mesh node .{a[1:]}" for a in anchor_ids if a != "gw"}
     out = [
-        StreamInfo(f"rtt.{a}", "rtt", "ms", hz, "probe", f"RTT · {names[a]}", anchor=a,
+        StreamInfo(f"rtt.{a}", "rtt", "ms", hz, "probe", f"RTT to {names[a]}", anchor=a,
                    stab_tol=0.5)  # fmt: skip
         for a in anchor_ids
     ]

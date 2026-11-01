@@ -98,7 +98,7 @@ class IcmpSource(Source):
     def streams(self) -> list[StreamInfo]:
         return [
             StreamInfo(
-                f"rtt.{a.id}", "rtt", "ms", self.rate(a), "probe", f"RTT · {a.name}",
+                f"rtt.{a.id}", "rtt", "ms", self.rate(a), "probe", f"RTT to {a.name}",
                 anchor=a.id, stab_tol=0.5,
             )  # fmt: skip
             for a in self.anchors
