@@ -19,6 +19,8 @@ def _serve(args: argparse.Namespace) -> None:
     from radar.server.app import SourceReq, create_app
 
     engine = Engine(args.data)
+    if args.sonar:
+        engine.sonar_enabled = True
     app = create_app(engine, SourceReq(kind=args.source))
     url = f"http://{'127.0.0.1' if args.host in ('0.0.0.0', '::') else args.host}:{args.port}"
     print(f"WiFi Motion Radar → {url}  (source: {args.source})")
@@ -65,6 +67,39 @@ def _rates(args: argparse.Namespace) -> None:
     print("\nrefresh = value changes per second: the rate at which new information arrives.")
 
 
+def _sonar_test(args: argparse.Namespace) -> None:
+    """Run the sonar alone and report signal health and what it sees."""
+    from radar.sonar.source import SonarSource
+
+    src = SonarSource()
+    if args.save:
+        src.raw = []
+    print(f"output: {src.out_name}\ninput:  {src.in_name} via {src.path}, {src.channels} ch")
+    print("Playing a quiet 18.5-22 kHz sweep. Walk around in front of the PC.")
+    src.start(lambda s: None)
+    t_end = time.time() + args.seconds
+    while time.time() < t_end:
+        time.sleep(1.0)
+        s = src.extras()["sonar"]
+        h = s.get("health", {})
+        tgt = s.get("target")
+        where = (
+            f"target at {tgt['r']:.2f} m, mic difference {tgt['path_diff']} m"
+            if tgt else "no moving target"
+        )  # fmt: skip
+        print(
+            f"  {h.get('status'):8s} input {h.get('input_db')} dBFS, "
+            f"echo SNR {h.get('snr_db')} dB, motion {s.get('motion')}, {where}"
+        )
+    print("fixed echoes (walls, furniture) at:", src.extras()["sonar"].get("echoes"), "m")
+    src.stop()
+    if args.save and src.raw:
+        import numpy as np
+
+        np.save(args.save, np.concatenate(src.raw))
+        print(f"saved {len(src.raw)} raw blocks to {args.save}")
+
+
 def _anchors(args: argparse.Namespace) -> None:
     from radar.sources.anchors import AnchorStore, discover
 
@@ -106,7 +141,13 @@ def main(argv: list[str] | None = None) -> None:
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8765)
     s.add_argument("--open", action="store_true", help="open the dashboard in a browser")
+    s.add_argument("--sonar", action="store_true", help="also run the acoustic sonar")
     s.set_defaults(fn=_serve)
+
+    so = sub.add_parser("sonar-test", help="check the speakers and microphone can carry the sonar")
+    so.add_argument("--seconds", type=float, default=6.0)
+    so.add_argument("--save", type=Path, help="also save the raw microphone audio (.npy)")
+    so.set_defaults(fn=_sonar_test)
 
     r = sub.add_parser("rates", help="measure poll vs refresh rate of every stream")
     r.add_argument("--source", choices=["live", "sim"], default="live")

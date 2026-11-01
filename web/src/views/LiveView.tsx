@@ -11,8 +11,8 @@ import type { StreamInfo } from "../lib/protocol";
 import { useLive } from "../lib/store";
 import { attempt } from "../lib/toast";
 
-const ORDER = ["rtt", "retry", "rssi", "rate", "fail", "quality", "tx"];
-const KEY_KINDS = new Set(["rtt", "retry", "rssi"]);
+const ORDER = ["sonar", "sonar_range", "sonar_bearing", "rtt", "retry", "rssi", "rate", "fail", "quality", "tx"];
+const KEY_KINDS = new Set(["sonar", "sonar_range", "rtt", "retry", "rssi"]);
 
 function toLane(s: StreamInfo): Lane {
   return { stream: s.name, label: s.label, unit: s.unit, tol: s.stab_tol };

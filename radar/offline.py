@@ -69,6 +69,8 @@ def session_windows(
             feats = window_features(y, fs, info.stab_tol)
             for k, v in feats.items():
                 row[f"{info.name}.{k}"] = v
-            row[f"{info.name}.act"] = activity(feats, info.stab_tol)
+            row[f"{info.name}.act"] = (
+                feats["level"] if info.activity == "level" else activity(feats, info.stab_tol)
+            )
         rows.append(row)
     return pd.DataFrame(rows)

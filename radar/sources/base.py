@@ -40,6 +40,10 @@ class StreamInfo:
     resample: str = "linear"
     # Half-width of the "stable" band used by the stability feature, in stream units.
     stab_tol: float = 1.0
+    # What the detector reads from a window: "spread" (how much the stream wobbles,
+    # right for raw signals) or "level" (its median, right for a stream that is
+    # already a change measure, like the sonar's residual power).
+    activity: str = "spread"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -76,6 +80,10 @@ class Source(ABC):
 
     def describe(self) -> dict[str, Any]:
         return {"kind": self.kind, "name": self.name}
+
+    def extras(self) -> dict[str, Any]:
+        """Rich per-frame data beyond scalar streams (e.g. the sonar's range map)."""
+        return {}
 
     @property
     def stopped(self) -> bool:
@@ -129,3 +137,9 @@ class CompositeSource(Source):
 
     def describe(self) -> dict[str, Any]:
         return {"kind": self.kind, "name": self.name, "parts": [p.describe() for p in self.parts]}
+
+    def extras(self) -> dict[str, Any]:
+        out: dict[str, Any] = {}
+        for p in self.parts:
+            out.update(p.extras())
+        return out

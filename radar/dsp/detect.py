@@ -35,6 +35,12 @@ KIND_PRIOR = {
     "quality": 0.0, "tx": 0.0, "truth": 0.0,
 }  # fmt: skip
 
+# When the sonar is running it is a direct measurement of motion in the room, while the
+# WiFi streams on a short, strong link carry almost none. Averaging seven noisy RTT
+# streams into it would bury it, so until a probe measures otherwise, it decides alone.
+# Its slow presence channel joins at half weight so small movements still register.
+SONAR_PRIOR = {"sonar": 1.0, "sonar_presence": 0.5}
+
 
 @dataclass
 class DetectorConfig:
@@ -144,7 +150,10 @@ class MotionDetector:
     def weight(self, stream: str) -> float:
         if stream in self.weights:
             return self.weights[stream]
-        return KIND_PRIOR.get(self.kinds.get(stream, ""), 0.0)
+        kind = self.kinds.get(stream, "")
+        if "sonar" in self.kinds.values():
+            return SONAR_PRIOR.get(kind, 0.0)
+        return KIND_PRIOR.get(kind, 0.0)
 
     def _baseline(self, stream: str) -> Baseline:
         b = self.baselines.get(stream)

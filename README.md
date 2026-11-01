@@ -17,7 +17,8 @@ one sensing stream; red in the gutter marks a stream that is disturbed right now
 |---|---|
 | Sensing on Windows (link quality, driver counters, 100 Hz probing of 7 anchors) | Working, measured below |
 | Feature pipeline, adaptive detector, recording, replay, feasibility probe | Working, 37 tests |
-| Dashboard (live, timeline, probe, record, sessions, lab, system) | Working |
+| Dashboard (live, room, timeline, probe, record, sessions, lab, system) | Working |
+| Acoustic sonar from the PC's own speakers and microphones (Room view) | Working, tuned on one recorded walk |
 | Feasibility test in a real home | **Next.** The probe is built; the run has not happened yet |
 | Labelled multi-day dataset, classifier, cross-day evaluation | Planned |
 
@@ -96,6 +97,47 @@ The choices that matter:
   mains-powered and fixed in place. Phones and laptops are listed but off by default,
   because power saving makes their round trips erratic.
 
+## The acoustic sonar (Room view)
+
+On the development PC the WiFi link turned out to be a one-metre hop to a mesh box under
+the desk, with about 60 dB of signal headroom. A person walking around the room never
+crosses it, so WiFi timing cannot place them. The Room view adds a second sensor that
+needs no extra hardware: the PC's speakers play a quiet 18.5 to 22 kHz sweep, repeated
+every 43 ms, and its two microphones record the echoes.
+
+Each block of audio is correlated with the sweep, which turns it into echo strength
+against distance at about 10 cm resolution. Three layers turn that into a dot:
+
+- **Moving person.** Subtracting a slowly updated background leaves only what changed.
+  A tracker follows the strongest change, preferring peaks near where it last saw
+  someone, because indoors the sweep reverberates and anyone moving disturbs the echo at
+  every distance a little.
+- **Still person.** A standing or sitting person sways and breathes by millimetres. At
+  20 kHz (1.7 cm wavelength) that rotates the echo's phase by tens of degrees, so the
+  variance of the complex echo over a 3 second window marks where they are.
+- **Direction.** The same echo reaches the two microphones at slightly different times.
+  That difference, centred by a one-click calibration, turns the distance into a position.
+
+What it took to get a clean signal on a Lenovo all-in-one:
+
+| Problem | Finding | Fix |
+|---|---|---|
+| Echoes vanish | Windows' voice processing (echo cancellation) erases whatever the speakers play | Capture the raw microphone over WDM-KS |
+| Garbled timing | WASAPI exclusive mode reported 48 kHz but delivered 96 kHz | Avoided |
+| Wrong devices | Windows renumbers audio devices when the mic is muted or unmuted | Devices chosen by name and driver |
+| Distant echoes buried | The direct speaker-to-mic sound wobbles each frame and leaks into every distance | Per-frame gain normalisation plus a low-sidelobe matched filter |
+
+On one 32 second recorded walk (stand at about 1 m, walk to the far wall, walk slowly
+back): while standing still, the presence layer placed the person at 0.6 to 0.7 m; the
+moving tracker started no false tracks while they stood still, found them at 3 to 4 m at
+the far wall and followed them back to about 1.1 m. Room-wide motion separated walking
+from standing with an AUC of 0.84. That is one walk in one room, used for tuning, so it
+is a sanity check rather than an accuracy figure.
+
+Run it with `radar serve --sonar`, or check a machine's audio first with
+`radar sonar-test`. It needs `pip install -e ".[sonar]"`. While it runs it holds the
+microphone exclusively.
+
 ## The feasibility probe
 
 ![Probe results on the simulator](docs/img/probe-light-1440.png)
@@ -128,12 +170,14 @@ simulator).
 ```powershell
 python -m venv .venv
 .venv\Scripts\activate
-pip install -e ".[dev]"
+pip install -e ".[dev,sonar]"
 npm --prefix web install
 npm --prefix web run build
 
 radar serve --open            # live WiFi; falls back to the simulator if unavailable
 radar serve --source sim      # simulator only
+radar serve --sonar           # live WiFi plus the acoustic sonar (Room view)
+radar sonar-test              # check the speakers and microphone can carry the sonar
 radar rates                   # measure what this adapter really delivers
 radar anchors                 # list probe anchors with a test ping
 radar simulate --minutes 10   # write a labelled simulated session
@@ -186,6 +230,7 @@ network name and address overwritten before they are saved.
 ```
 radar/
   sources/     Windows WLAN + ICMP backends, anchor discovery, simulator, replay, Linux/macOS
+  sonar/       acoustic sonar: sweep, matched filter, tracker, presence map, audio source
   dsp/         ring buffers, resampling, features, detector
   engine.py    the live loop
   probe.py     feasibility probe scoring

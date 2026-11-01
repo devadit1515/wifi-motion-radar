@@ -64,6 +64,7 @@ class Engine:
         self.live_weights: dict[str, float] = cfg.get("weights", {})
         self.guard = Guard(**cfg.get("guard", {}))
         self.last_probe: dict[str, Any] | None = cfg.get("last_probe")
+        self.sonar_enabled: bool = bool(cfg.get("sonar", False))
 
         self._live_events = EventLog(data_dir / "events.jsonl")
         self._mem_events = EventLog(None)
@@ -98,6 +99,7 @@ class Engine:
             "weights": self.live_weights,
             "guard": {"armed": self.guard.armed, "webhook": self.guard.webhook},
             "last_probe": self.last_probe,
+            "sonar": self.sonar_enabled,
         }
         self.cfg_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
 
@@ -247,7 +249,9 @@ class Engine:
             if q < 0.5:
                 continue
             feats = window_features(y, fs, info.stab_tol)
-            acts[name] = activity(feats, info.stab_tol)
+            acts[name] = (
+                feats["level"] if info.activity == "level" else activity(feats, info.stab_tol)
+            )
             grids[name] = (y, fs)
 
         wall = self._wall(t)
@@ -319,6 +323,8 @@ class Engine:
         src = self.source
         if src is not None and hasattr(src, "truth"):
             frame["truth"] = src.truth()  # type: ignore[attr-defined]
+        if src is not None:
+            frame.update(src.extras())
         if src is not None and src.kind == "replay":
             frame["replay"] = src.status()  # type: ignore[attr-defined]
         if self.recorder:
@@ -383,6 +389,7 @@ class Engine:
                 "events": self.events.recent(60),
                 "window_s": WINDOW_S,
                 "hop_s": HOP_S,
+                "sonar_enabled": self.sonar_enabled,
             }
 
     # ---- controls --------------------------------------------------------------

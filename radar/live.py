@@ -10,11 +10,19 @@ from radar.sources.base import CompositeSource, Source, SourceUnavailable
 
 
 def build_live_source(
-    data_dir: Path, hz: float = 100.0, aux_hz: float = 50.0
+    data_dir: Path, hz: float = 100.0, aux_hz: float = 50.0, sonar: bool = False
 ) -> tuple[Source, list[Anchor]]:
     parts: list[Source] = []
     problems: list[str] = []
     anchors: list[Anchor] = []
+
+    if sonar:
+        from radar.sonar.source import SonarSource
+
+        try:
+            parts.append(SonarSource())
+        except SourceUnavailable as e:
+            problems.append(f"sonar: {e}")
 
     if sys.platform == "win32":
         from radar.sources.win_icmp import IcmpSource

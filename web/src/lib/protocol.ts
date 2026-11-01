@@ -155,6 +155,7 @@ export interface Hello {
   events: RadarEvent[];
   window_s: number;
   hop_s: number;
+  sonar_enabled: boolean;
 }
 
 export interface StreamFrame {
@@ -187,6 +188,42 @@ export interface Frame {
   rec?: RecStatus;
   probe?: ProbeStatus;
   stats?: Record<string, StreamStats>;
+  sonar?: SonarExtras;
+}
+
+export interface SonarTarget {
+  r: number;
+  path_diff: number | null;
+  strength: number;
+  moving: boolean;
+  still: boolean; // found by the slow presence channel (sway, breathing)
+}
+
+export interface SonarExtras {
+  bin_m: number;
+  r_min: number;
+  r_max: number;
+  channels: number;
+  fps: number;
+  capture_path: string;
+  error: string | null;
+  health: { status: string; input_db: number | null; snr_db: number | null; message: string | null };
+  motion?: number | null;
+  presence?: number | null;
+  bins?: number[];
+  static_db?: number[];
+  echoes?: number[];
+  direct_diff_m?: number | null;
+  target?: SonarTarget | null;
+}
+
+export interface Room {
+  width: number;
+  depth: number;
+  pc_x: number;
+  mic_spacing: number | null;
+  pd_center: number | null;
+  flip: boolean;
 }
 
 export interface ReplayMsg {

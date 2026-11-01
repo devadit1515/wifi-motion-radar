@@ -7,12 +7,14 @@ import { LabView } from "./views/LabView";
 import { LiveView } from "./views/LiveView";
 import { ProbeView } from "./views/ProbeView";
 import { RecordView } from "./views/RecordView";
+import { RoomView } from "./views/RoomView";
 import { SessionsView } from "./views/SessionsView";
 import { SystemView } from "./views/SystemView";
 import { TimelineView } from "./views/TimelineView";
 
 const VIEWS = [
   { id: "live", label: "Live", el: LiveView },
+  { id: "room", label: "Room", el: RoomView },
   { id: "timeline", label: "Timeline", el: TimelineView },
   { id: "probe", label: "Probe", el: ProbeView },
   { id: "record", label: "Record", el: RecordView },

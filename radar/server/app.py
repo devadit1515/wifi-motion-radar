@@ -80,9 +80,28 @@ def _conflict(e: Exception) -> HTTPException:
     return HTTPException(status_code=409, detail=str(e))
 
 
+class SonarReq(BaseModel):
+    enabled: bool
+
+
+class RoomReq(BaseModel):
+    width: float
+    depth: float
+    pc_x: float
+    mic_spacing: float | None = None  # metres; sets how far a path difference turns the dot
+    pd_center: float | None = None  # path difference measured straight in front of the PC
+    flip: bool = False
+
+
+DEFAULT_ROOM = {
+    "width": 3.5, "depth": 4.0, "pc_x": 1.75, "mic_spacing": None, "pd_center": None,
+    "flip": False,
+}  # fmt: skip
+
+
 def switch_source(engine: Engine, req: SourceReq) -> None:
     if req.kind == "live":
-        src, anchors = build_live_source(engine.data_dir)
+        src, anchors = build_live_source(engine.data_dir, sonar=engine.sonar_enabled)
         engine.set_source(src, anchors)
     elif req.kind == "sim":
         engine.set_source(SimSource(seed=req.seed))
@@ -272,6 +291,36 @@ def create_app(engine: Engine, initial: SourceReq | None = None) -> FastAPI:
     @app.post("/api/guard")
     def guard(req: GuardReq) -> dict[str, Any]:
         return engine.set_guard(req.armed, req.webhook)
+
+    @app.post("/api/sonar")
+    def sonar(req: SonarReq) -> dict[str, Any]:
+        """Turn the acoustic sonar on or off. It runs as part of the live source."""
+        engine.sonar_enabled = req.enabled
+        engine.save_cfg()
+        if req.enabled or engine.kind == "live":
+            try:
+                switch_source(engine, SourceReq(kind="live"))
+            except SourceUnavailable as e:
+                raise _conflict(e) from e
+        return {"enabled": engine.sonar_enabled, "source": engine.capabilities()["source"]}
+
+    room_path = engine.data_dir / "room.json"
+
+    @app.get("/api/room")
+    def get_room() -> dict[str, Any]:
+        try:
+            return {**DEFAULT_ROOM, **json.loads(room_path.read_text(encoding="utf-8"))}
+        except (OSError, ValueError):
+            return dict(DEFAULT_ROOM)
+
+    @app.put("/api/room")
+    def put_room(req: RoomReq) -> dict[str, Any]:
+        room = req.model_dump()
+        room["width"] = min(max(room["width"], 1.0), 15.0)
+        room["depth"] = min(max(room["depth"], 1.0), 15.0)
+        room["pc_x"] = min(max(room["pc_x"], 0.0), room["width"])
+        room_path.write_text(json.dumps(room, indent=2), encoding="utf-8")
+        return room
 
     @app.get("/api/lab")
     def lab() -> dict[str, Any]:

@@ -843,14 +843,90 @@
   grid-column: auto;
 }
 
+/* ---- room ------------------------------------------------------------------- */
+
+.room-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.room-canvas-sheet {
+  padding: 8px;
+}
+
+.room-canvas {
+  display: block;
+  width: 100%;
+  height: min(72vh, 680px);
+}
+
+.room-side {
+  display: grid;
+  gap: 16px;
+}
+
+.room-side .sheet {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+
+.room-side .sheet > * + * {
+  margin-top: 0;
+}
+
+.room-side .field,
+.room-side .facts {
+  width: 100%;
+}
+
+.room-side input[type="range"] {
+  width: 100%;
+  accent-color: var(--ink);
+}
+
+.room-form {
+  width: 100%;
+}
+
+.sonar-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--ink-soft);
+}
+
+.status-dot.on {
+  border-color: var(--pen-red);
+  background: var(--pen-red);
+  animation: blink 1.6s steps(2, start) infinite;
+}
+
+.room-note {
+  max-width: 90ch;
+}
+
 /* ---- narrow screens ------------------------------------------------------------ */
 
 @media (max-width: 960px) {
   .live-head,
   .live-grid,
   .sim,
-  .sessions {
+  .sessions,
+  .room-layout {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .room-canvas {
+    height: 60vh;
   }
 
   .linkmap {
