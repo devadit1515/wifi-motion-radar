@@ -87,7 +87,7 @@ The choices that matter:
   low half of a drifting signal and the baseline falls further behind with every update.
 - **Motion starts on either of two triggers.** The fused score staying above threshold
   for three windows catches sudden motion; a CUSUM catches slow, sustained disturbance.
-  Motion ends when a 0.5 s smoothed score stays below a lower threshold for three seconds,
+  Motion ends when a 0.5 s smoothed score stays below a lower threshold for 1.5 seconds,
   so a single noisy window cannot restart the timer.
 - **Stillness is reported honestly.** After motion stops, the state reads "motion stopped
   N minutes ago" rather than "empty". Timing and signal strength cannot see a person who

@@ -48,7 +48,7 @@ class DetectorConfig:
     z_on: float = 3.0
     z_off: float = 1.5
     on_windows: int = 3
-    hold_s: float = 3.0
+    hold_s: float = 1.5
     presence_hold_s: float = 300.0
     cusum_k: float = 1.0
     cusum_h: float = 20.0
