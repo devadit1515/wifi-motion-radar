@@ -16,8 +16,9 @@ one sensing stream; red in the gutter marks a stream that is disturbed right now
 | Part | State |
 |---|---|
 | Sensing on Windows (link quality, driver counters, 100 Hz probing of 7 anchors) | Working, measured below |
-| Feature pipeline, adaptive detector, recording, replay, feasibility probe | Working, 37 tests |
+| Feature pipeline, adaptive detector, recording, replay, feasibility probe | Working, 51 tests |
 | Dashboard (live, room, timeline, probe, record, sessions, lab, system) | Working |
+| Hosted website + Windows helper app | Working; [open it](https://devadit1515.github.io/wifi-motion-radar/) |
 | Acoustic sonar from the PC's own speakers and microphones (Room view) | Working, tuned on one recorded walk |
 | Feasibility test in a real home | **Next.** The probe is built; the run has not happened yet |
 | Labelled multi-day dataset, classifier, cross-day evaluation | Planned |
@@ -181,7 +182,30 @@ with nobody moving.
 The simulator exists for tests with ground truth and for a demo that runs on any machine.
 Its numbers say the pipeline is wired correctly, not that the method works in a real home.
 
-## Run it
+## Use it from the website
+
+**https://devadit1515.github.io/wifi-motion-radar/**
+
+A website cannot read a computer's WiFi driver or record its microphone without
+processing, so the sensing runs in a small helper app on the computer itself and the
+website is the dashboard for it:
+
+1. Download the helper from the website (or from
+   [Releases](https://github.com/devadit1515/wifi-motion-radar/releases/latest)), unzip
+   it and open `MotionRadar.exe`. Windows 10 or 11, no installation, no Python.
+2. The website connects to it. Chrome and Edge ask once whether the site may reach apps
+   on this computer; allow it.
+
+Nothing is sent anywhere: the page is static and the browser talks straight to the
+helper on `127.0.0.1`. The helper answers that one website and its own pages only; any
+other site gets a 403, and a forged host name (DNS rebinding) is refused too. The helper
+also serves the same dashboard at `http://127.0.0.1:8765`, which needs no permission
+prompt and no internet.
+
+The helper is built by GitHub Actions on every version tag (`packaging/build.ps1`), and
+the website is deployed to GitHub Pages on every push that touches `web/`.
+
+## Run it from source
 
 Requirements: Python 3.11+, Node 20+, Windows 10/11 for live sensing (any OS runs the
 simulator).

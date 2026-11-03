@@ -1031,3 +1031,11 @@
     animation: none;
   }
 }
+
+.connect-blocked {
+  border-color: var(--pen-red);
+}
+
+.connect-blocked .btn {
+  justify-self: start;
+}
