@@ -100,7 +100,10 @@ class SonarSource(Source):
     def streams(self) -> list[StreamInfo]:
         hz = self.cfg.fs / self.cfg.period
         return [
-            StreamInfo("sonar.motion", "sonar", "share", hz, "sonar", "Sonar motion",
+            # The detector reads the fast-change map; the moving share is for display.
+            StreamInfo("sonar.doppler", "sonar", "log ratio", hz, "sonar", "Sonar motion",
+                       stab_tol=0.1, activity="level"),  # fmt: skip
+            StreamInfo("sonar.motion", "sonar_share", "share", hz, "sonar", "Sonar moving share",
                        stab_tol=0.1, activity="level"),  # fmt: skip
             StreamInfo("sonar.presence", "sonar_presence", "log ratio", hz, "sonar",
                        "Sonar presence", stab_tol=0.1, activity="level"),  # fmt: skip
@@ -188,6 +191,7 @@ class SonarSource(Source):
             t = now()
             with self._lock:
                 self._latest = fr
+            emit(Sample("sonar.doppler", t, fr.fast))
             emit(Sample("sonar.motion", t, fr.motion))
             emit(Sample("sonar.presence", t, fr.presence))
             tgt = fr.target
@@ -223,6 +227,7 @@ class SonarSource(Source):
         base.update(
             health=fr.health.to_dict(),
             motion=None if not math.isfinite(fr.motion) else round(fr.motion, 3),
+            fast=None if not math.isfinite(fr.fast) else round(fr.fast, 3),
             presence=None if not math.isfinite(fr.presence) else round(fr.presence, 3),
             bins=fr.bins,
             static_db=fr.static_db,

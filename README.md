@@ -119,6 +119,12 @@ against distance at about 10 cm resolution. Three layers turn that into a dot:
   so "the echo changed" cannot mean "moving". Walking turns the echo's phase more than
   a full cycle per 43 ms frame, so consecutive frames look unrelated; breathing turns it
   a few degrees. Only that frame-to-frame decorrelation counts as motion.
+- **Motion that is too faint to track.** At 3 to 4 m the echo is roughly a hundred
+  times weaker than at 1 m, so the tracker often loses a walker there. A second layer
+  does not track at all: at every distance it measures how much the echo changed since
+  the last frame, smoothed over 0.15 s and neighbouring distances, against that
+  distance's own quiet level, and gated by the same decorrelation test. The strongest
+  value is what the motion detector reads, so its threshold adapts to each room.
 - **Direction.** The same echo reaches the two microphones at slightly different times.
   That difference, centred by a one-click calibration, turns the distance into a position.
 
@@ -132,11 +138,20 @@ What it took to get a clean signal on a Lenovo all-in-one:
 | Distant echoes buried | The direct speaker-to-mic sound wobbles each frame and leaks into every distance | Per-frame gain normalisation plus a low-sidelobe matched filter |
 
 On one 32 second recorded walk (stand at about 1 m, walk to the far wall, walk slowly
-back): while standing still, the presence layer placed the person at 0.6 to 0.7 m; the
-moving tracker started no false tracks while they stood still, found them at 3 to 4 m at
-the far wall and followed them back to about 1.1 m. Room-wide motion separated walking
-from standing with an AUC of 0.84. That is one walk in one room, used for tuning, so it
-is a sanity check rather than an accuracy figure.
+back), the tracker found the person at 3 to 4 m at the far wall and followed them back
+to about 1.1 m. A first round of tuning treated the opening seconds as standing still;
+a closer look showed fast, strong echo changes at 0.8 to 1.2 m there, so the person was
+still getting into position, and that tuning had taught the sonar to ignore real
+movement. Fed through the detector, the old motion share and the fast-change level
+compare as follows, scored under both readings of the recording (2 s windows):
+
+| Motion input | AUC, opening seconds as still | AUC, far-wall pause as still | False motion, quiet stretch |
+|---|---|---|---|
+| Moving share (before) | 0.67 | 0.57 | 26% |
+| Fast-change level (now) | 0.83 | 0.78 | 0% |
+
+That is one walk in one room, used for tuning, so it is a sanity check rather than an
+accuracy figure.
 
 Run it with `radar serve --sonar`, or check a machine's audio first with
 `radar sonar-test`. It needs `pip install -e ".[sonar]"`. While it runs it holds the

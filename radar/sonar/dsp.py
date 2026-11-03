@@ -69,6 +69,19 @@ class SonarConfig:
     decorr_alpha: float = 0.3
     jump_m: float = 0.3  # a bigger frame-to-frame jump is re-acquisition, not movement
     motion_min_share: float = 0.3  # moving for at least this share of a second
+    # Fast-change map: at every distance, how much the echo changed since the last
+    # frame, smoothed over a few frames and neighbouring distances, against that
+    # distance's own quiet level. It does not depend on the tracker holding on, so it
+    # still sees a walker at 3-4 m whose echo is too faint to track. A gate on the
+    # same decorrelation as above keeps breathing and sway out.
+    fast_alpha: float = 0.3  # smoothing over frames (about 0.15 s)
+    fast_spread: int = 1  # neighbouring bins summed on each side
+    fast_rise: float = 0.01  # quiet level creep per frame: doubles in about 3 s
+    fast_fall: float = 0.04  # and step down; the level settles near the 20th percentile
+    fast_d0: float = 0.3  # decorrelation where the gate starts to open
+    fast_d_span: float = 0.4  # and how much more it needs to open fully
+    fast_min_range_m: float = 0.6  # nearer is hands on the keyboard and mouse
+    fast_move_ratio: float = 15.0  # map level that marks a frame as moving
     # Presence: slow phase changes of the echo over a sliding window. A standing or
     # sitting person sways and breathes by millimetres; at 20 kHz (1.7 cm wavelength)
     # that turns the echo's phase by tens of degrees, which this window catches while
@@ -179,6 +192,7 @@ class PresenceMap:
 class SonarFrame:
     health: Health
     motion: float = math.nan  # share of the last second someone was changing distance
+    fast: float = math.nan  # log10(1 + strongest fast-change level): the detector's input
     presence: float = math.nan  # log10 of the strongest slow-change ratio
     target: Target | None = None
     bins: list[float] = field(default_factory=list)  # 0..1 motion intensity per bin
@@ -242,6 +256,11 @@ class RangeProcessor:
         self._decorr: float | None = None
         self._last_moving_t = -math.inf
         self._moving_hist: list[tuple[float, bool]] = []
+        self._fd: np.ndarray | None = None  # smoothed frame-to-frame change per bin
+        self._fb: np.ndarray | None = None  # smoothed echo energy per bin
+        self._ffloor: np.ndarray | None = None
+        self._fn = 0
+        self.fast_bins: np.ndarray | None = None
         self.presence: PresenceMap | None = None
         self._t = 0.0
 
@@ -303,6 +322,7 @@ class RangeProcessor:
             # Report how well the sweep is heard, so muted speakers read as "weak".
             snr = 20 * math.log10(float(mag0.max()) / (float(np.median(mag0)) + 1e-12))
             self._last_target = None
+            self._prev_resid = None
             return SonarFrame(self._health(block, snr))
         self._misses = 0
         snr_db = 20 * math.log10(direct / (float(np.median(mag0)) + 1e-12))
@@ -311,6 +331,7 @@ class RangeProcessor:
             # "detected" now would be noise, so report the problem and nothing else.
             self._last_target = None
             self._smooth_r = self._smooth_pd = self._still_r = self._still_pd = None
+            self._prev_resid = None
             return SonarFrame(self._health(block, snr_db), direct_diff_m=self.direct_diff_m)
 
         idx = (self.lag + np.arange(self.K)) % P
@@ -350,6 +371,7 @@ class RangeProcessor:
             return SonarFrame(self._health(block, snr_db), direct_diff_m=self.direct_diff_m)
         assert self.floor is not None
         ratio = bins / self.floor
+        fast = self._fast_map(resid[0])
         # Track, don't just pick the loudest bin. Indoors the sweep reverberates for
         # longer than one period, so anyone moving changes the echo at every distance;
         # the person's own echo is the strongest change only some of the time. A
@@ -393,7 +415,9 @@ class RangeProcessor:
             d = None if jumped else self._decorrelation(resid[0], lo, hi)
             if d is not None:
                 self._decorr = _ewma(self._decorr, min(d, 1.0), cfg.decorr_alpha)
-            moving = self._decorr is not None and self._decorr > cfg.move_decorr
+            moving = (self._decorr is not None and self._decorr > cfg.move_decorr) or (
+                self._fast_near(self._smooth_r) > cfg.fast_move_ratio
+            )
             self._last_target = Target(self._smooth_r, self._smooth_pd, float(ratio[best]),
                                        moving=moving, still=not moving)  # fmt: skip
         elif (
@@ -412,7 +436,9 @@ class RangeProcessor:
         # Motion level for the detector: the share of the last second in which someone
         # was moving (distance changing). Breathing and fidgeting never raise it.
         self._prev_resid = resid[0].copy()
-        now_moving = bool(self._last_target and self._last_target.moving)
+        now_moving = bool(self._last_target and self._last_target.moving) or (
+            math.isfinite(fast) and fast > cfg.fast_move_ratio
+        )
         self._moving_hist.append((self._t, now_moving))
         self._moving_hist = [(t, m) for t, m in self._moving_hist if self._t - t <= 1.0]
         share = sum(m for _, m in self._moving_hist) / len(self._moving_hist)
@@ -456,6 +482,7 @@ class RangeProcessor:
         return SonarFrame(
             health=self._health(block, snr_db),
             motion=motion,
+            fast=math.log10(1.0 + fast) if math.isfinite(fast) else math.nan,
             presence=presence,
             target=self._last_target,
             bins=[round(float(v), 3) for v in intensity],
@@ -463,6 +490,45 @@ class RangeProcessor:
             echoes=self._echoes(static_db),
             direct_diff_m=self.direct_diff_m,
         )
+
+    def _fast_map(self, r0: np.ndarray) -> float:
+        """Update the fast-change map from this frame's residual; return its peak."""
+        cfg = self.cfg
+        prev = self._prev_resid
+        if prev is None:
+            return math.nan
+        starts, nb = self.edges[:-1], self.n_bins
+        diff = np.add.reduceat(np.abs(r0 - prev) ** 2, starts)[:nb]
+        both = np.add.reduceat(np.abs(r0) ** 2 + np.abs(prev) ** 2, starts)[:nb]
+        if cfg.fast_spread:
+            k = np.ones(2 * cfg.fast_spread + 1)
+            diff, both = np.convolve(diff, k, "same"), np.convolve(both, k, "same")
+        self._fd = _ewma_arr(self._fd, diff, cfg.fast_alpha)
+        self._fb = _ewma_arr(self._fb, both, cfg.fast_alpha)
+        # The quiet level follows a low percentile of each bin: it steps down faster
+        # than it creeps up, so starting the sonar while someone moves does not leave it
+        # deaf, and a steady source (a fan) is absorbed within seconds. A plain running
+        # minimum sat so low that noise alone read 15x over it.
+        # The first second only sets that level, starting from the average.
+        self._fn += 1
+        if self._fn <= cfg.warm_frames:
+            self._ffloor = _ewma_arr(self._ffloor, self._fd, 1.0 / self._fn)
+            return math.nan
+        assert self._ffloor is not None
+        up = self._fd > self._ffloor
+        self._ffloor *= np.where(up, 1 + cfg.fast_rise, 1 - cfg.fast_fall)
+        d = self._fd / (self._fb + 1e-30)
+        gate = np.clip((d - cfg.fast_d0) / cfg.fast_d_span, 0.0, 1.0)
+        level = self._fd / (self._ffloor + 1e-30) * gate
+        level[self.centres < cfg.fast_min_range_m] = 0.0
+        self.fast_bins = level
+        return float(level.max())
+
+    def _fast_near(self, r: float | None, half_m: float = 0.4) -> float:
+        if r is None or self.fast_bins is None:
+            return 0.0
+        near = np.abs(self.centres - r) <= half_m
+        return float(self.fast_bins[near].max()) if near.any() else 0.0
 
     def _decorrelation(self, r0: np.ndarray, lo: int, hi: int) -> float | None:
         """How unrelated this frame's residual is to the last one over samples lo:hi:

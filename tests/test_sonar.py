@@ -107,6 +107,24 @@ def test_breathing_at_the_desk_is_still_not_motion():
     assert len(seen) > 0.8 * len(late) and all(t.still for t in seen)
 
 
+def test_fast_change_map_sees_a_slow_far_walker_but_not_breathing():
+    # The detector's input: a slow walk (0.1 m/s) at 3.5 m must rise well above an
+    # empty room, while breathing at the desk must stay at the empty-room level.
+    def level(target):
+        _, out = run(frames(200, target=target))
+        return np.nanmedian([f.fast for f in out[80:]])
+
+    def slow_walk(i):
+        return 3.5 + 0.1 * i * P / CFG.fs * np.sign(np.sin(i / 60))
+
+    def breathe(i):
+        return 0.7 + 0.005 * np.sin(2 * np.pi * 0.25 * i * P / CFG.fs)
+
+    empty = level(None)
+    assert level(slow_walk) > empty + 1.0
+    assert level(breathe) < empty + 0.2
+
+
 def test_muted_speakers_give_a_warning_and_no_made_up_target():
     def walk(i):
         return 2.0 + 0.15 * np.sin(i / 3)
