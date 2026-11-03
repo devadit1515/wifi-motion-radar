@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { engineWs } from "./engine";
 import { Ring } from "./ring";
 import {
   STATE_CODE,
@@ -27,6 +28,7 @@ export type Conn = "connecting" | "open" | "closed";
  */
 class LiveStore {
   conn: Conn = "connecting";
+  everOpen = false;
   hello: Hello | null = null;
   streams: StreamInfo[] = [];
   traces = new Map<string, Ring>();
@@ -49,11 +51,11 @@ class LiveStore {
   private displayT = 0;
 
   connect(): void {
-    const proto = location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${location.host}/ws/live`);
+    const ws = new WebSocket(engineWs("/ws/live"));
     this.conn = "connecting";
     ws.onopen = () => {
       this.conn = "open";
+      this.everOpen = true;
       this.retry = 500;
       this.bump(true);
     };

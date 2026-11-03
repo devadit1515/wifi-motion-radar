@@ -961,3 +961,73 @@
     grid-column: 2;
   }
 }
+
+/* Hosted website, before the helper answers ----------------------------------- */
+.connect {
+  max-width: 760px;
+}
+
+.connect-steps {
+  list-style: none;
+  margin: 0;
+  counter-reset: step;
+  display: grid;
+  gap: 22px;
+}
+
+.connect-steps > li {
+  counter-increment: step;
+  display: grid;
+  grid-template-columns: 2.25rem minmax(0, 1fr);
+  column-gap: 14px;
+  align-items: start;
+}
+
+.connect-steps > li + li {
+  margin-top: 0;
+  padding-top: 22px;
+  border-top: 1px solid var(--rule);
+}
+
+.connect-steps > li::before {
+  content: counter(step);
+  grid-row: span 3;
+  font-size: var(--step-2);
+  font-weight: 640;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--pen-red);
+}
+
+.connect-steps h3 {
+  font-size: var(--step-1);
+  font-weight: 620;
+}
+
+.connect-steps .btn {
+  justify-self: start;
+  margin-top: 12px;
+}
+
+.connect-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.connect-status .conn {
+  animation: connect-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes connect-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .connect-status .conn {
+    animation: none;
+  }
+}

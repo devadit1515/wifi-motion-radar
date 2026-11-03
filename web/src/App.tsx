@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { api } from "./lib/api";
+import { HOSTED } from "./lib/engine";
 import { fmtDuration } from "./lib/format";
 import { useLive } from "./lib/store";
 import { attempt, useToasts } from "./lib/toast";
+import { ConnectView } from "./views/ConnectView";
 import { LabView } from "./views/LabView";
 import { LiveView } from "./views/LiveView";
 import { ProbeView } from "./views/ProbeView";
@@ -36,8 +38,11 @@ function useRoute(): string {
 
 export function App() {
   const route = useRoute();
+  const live = useLive();
   const view = VIEWS.find((v) => v.id === route) ?? VIEWS[0];
   const View = view.el;
+  // The hosted website has nothing to show until the helper on this machine answers.
+  const needHelper = HOSTED && live.conn !== "open";
   useEffect(() => {
     document.title = view.id === "live" ? "Motion Radar" : `${view.label} | Motion Radar`;
   }, [view]);
@@ -49,7 +54,7 @@ export function App() {
       </a>
       <TopBar route={view.id} />
       <main id="main" className="main">
-        <View />
+        {needHelper ? <ConnectView /> : <View />}
       </main>
       <Toasts />
     </>
@@ -97,7 +102,7 @@ function TopBar({ route }: { route: string }) {
             Away Guard on
           </a>
         )}
-        {kind === "replay" ? (
+        {HOSTED && live.conn !== "open" ? null : kind === "replay" ? (
           <span className="pill">Replaying</span>
         ) : (
           <div className="segmented" role="group" aria-label="Data source">

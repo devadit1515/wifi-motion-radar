@@ -15,12 +15,14 @@ from typing import Any
 
 import numpy as np
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from radar.engine import Engine
 from radar.live import build_live_source
+from radar.server.guard import OriginGuard, allowed_origins
 from radar.sources.anchors import AnchorStore, discover
 from radar.sources.base import SourceUnavailable
 from radar.sources.replay import ReplaySource
@@ -135,7 +137,9 @@ def overview(engine: Engine, sid: str, points: int = 1200) -> dict[str, Any]:
     return out
 
 
-def create_app(engine: Engine, initial: SourceReq | None = None) -> FastAPI:
+def create_app(
+    engine: Engine, initial: SourceReq | None = None, loopback_only: bool = False
+) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         engine.start()
@@ -150,6 +154,13 @@ def create_app(engine: Engine, initial: SourceReq | None = None) -> FastAPI:
         engine.stop()
 
     app = FastAPI(title="WiFi Motion Radar", lifespan=lifespan)
+    # The hosted dashboard is a page on another origin calling this machine's engine.
+    origins = allowed_origins()
+    app.add_middleware(
+        CORSMiddleware, allow_origins=sorted(origins), allow_methods=["*"], allow_headers=["*"],
+        allow_private_network=True,
+    )  # fmt: skip
+    app.add_middleware(OriginGuard, origins=origins, loopback_only=loopback_only)
 
     @app.get("/api/health")
     def health() -> dict[str, Any]:

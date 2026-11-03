@@ -10,6 +10,7 @@ import webbrowser
 from pathlib import Path
 
 DEFAULT_DATA = Path("data")
+SITE_URL = "https://devadit1515.github.io/wifi-motion-radar/"
 
 
 def _serve(args: argparse.Namespace) -> None:
@@ -19,20 +20,24 @@ def _serve(args: argparse.Namespace) -> None:
     from radar.server.app import SourceReq, create_app
 
     url = f"http://{'127.0.0.1' if args.host in ('0.0.0.0', '::') else args.host}:{args.port}"
+    show = SITE_URL if args.open_site else url
     if _already_running(url):
         # A second copy could get neither the port nor the microphone: reuse the first.
         print(f"Motion Radar is already running at {url}; opening it.")
-        if args.open:
-            webbrowser.open(url)
+        if args.open or args.open_site:
+            webbrowser.open(show)
         return
 
     engine = Engine(args.data)
     if args.sonar:
         engine.sonar_enabled = True
-    app = create_app(engine, SourceReq(kind=args.source))
-    print(f"WiFi Motion Radar → {url}  (source: {args.source})")
-    if args.open:
-        webbrowser.open(url)
+    loopback = args.host in ("127.0.0.1", "localhost", "::1")
+    app = create_app(engine, SourceReq(kind=args.source), loopback_only=loopback)
+    print(f"WiFi Motion Radar: {url}  (source: {args.source})")
+    if args.open_site:
+        print(f"Dashboard: {SITE_URL}  (or {url} without internet)")
+    if args.open or args.open_site:
+        webbrowser.open(show)
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
 
 
@@ -158,6 +163,7 @@ def main(argv: list[str] | None = None) -> None:
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8765)
     s.add_argument("--open", action="store_true", help="open the dashboard in a browser")
+    s.add_argument("--open-site", action="store_true", help="open the hosted dashboard instead")
     s.add_argument("--sonar", action="store_true", help="also run the acoustic sonar")
     s.set_defaults(fn=_serve)
 
